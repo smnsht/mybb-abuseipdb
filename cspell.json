@@ -1,0 +1,22 @@
+{
+    "version": "0.2",
+    "ignorePaths": [],
+    "dictionaryDefinitions": [],
+    "dictionaries": [],
+    "words": [
+        "ADMINCP",
+        "disporder",
+        "hostnames",
+        "isdefault",
+        "mybb",
+        "optionscode",
+        "smnsht",
+        "yesno"
+    ],
+    "ignoreWords": [
+        "IN_MYBB",
+        "abuseipdb",
+        "settinggroups"
+    ],
+    "import": []
+}
