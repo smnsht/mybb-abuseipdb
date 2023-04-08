@@ -1,5 +1,7 @@
 db.sqlite3
 
+vendor
+
 mybb/admin
 mybb/archive
 mybb/cache
@@ -22,3 +24,5 @@ mybb/inc/index.html
 
 mybb/inc/plugins/hello.php
 mybb/inc/plugins/index.html
+
+tests/api_key.txt

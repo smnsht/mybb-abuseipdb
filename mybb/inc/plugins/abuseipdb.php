@@ -5,22 +5,9 @@ if (!defined('IN_MYBB')) {
 	die("Direct initialization of this file is not allowed.");
 }
 
-define('ABUSEIPDB_SETTINGS_GROUP_NAME', 'abuseipdb_setting_group');
-
-// AbuseIPDB ip usage types
-define('ABUSEIPDB_USAGE_TYPE_COMMERCIAL', 'Commercial');
-define('ABUSEIPDB_USAGE_TYPE_ORGANIZATION', 'Organization');
-define('ABUSEIPDB_USAGE_TYPE_GOVERNMENT', 'Government');
-define('ABUSEIPDB_USAGE_TYPE_MILITARY', 'Military');
-define('ABUSEIPDB_USAGE_TYPE_EDU', 'University/College/School');
-define('ABUSEIPDB_USAGE_TYPE_LIBRARY', 'Library');
-define('ABUSEIPDB_USAGE_TYPE_CDN', 'Content Delivery Network');
-define('ABUSEIPDB_USAGE_TYPE_FIXED_LINE', 'Fixed Line ISP');
-define('ABUSEIPDB_USAGE_TYPE_MOBILE ISP', 'Mobile ISP');
-define('ABUSEIPDB_USAGE_TYPE_PROXY', 'Data Center/Web Hosting/Transit');
-define('ABUSEIPDB_USAGE_TYPE_SPIDER', 'Search Engine Spider');
-define('ABUSEIPDB_USAGE_TYPE_RESERVED', 'Reserved');
-
+require_once __DIR__ . '/abuseipdb/utils.php';
+require_once __DIR__ . '/abuseipdb/client.php';
+require_once __DIR__ . '/abuseipdb/handler.php';
 
 if(defined('IN_ADMINCP'))
 {
@@ -28,7 +15,7 @@ if(defined('IN_ADMINCP'))
 }
 else
 {	
-	$plugins->add_hook('member_register_start', 'on_member_register_start');
+	$plugins->add_hook('member_register_start', 'check');
 	$plugins->add_hook('member_do_register_start', 'check');	
 }
 
@@ -206,44 +193,31 @@ function check()
 	global $mybb, $session;
 
 	if($session->is_spider) {
-
+		error("not allowed");
 	}
+	
+	$response = $_SESSION['_abuseipdb_cached_result'];
 
-	//my $ip = $session->ipaddress;
-	$response = array(
-		"ipAddress" => "118.25.6.39",
-		"isPublic" => true,
-		"ipVersion" =>  4,
-		"isWhitelisted" => false,
-		"abuseConfidenceScore" => 100,
-		"countryCode" => "CN",
-		"countryName" => "China",
-		"usageType" => "Data Center/Web Hosting/Transit",
-		"isp" =>  "Tencent Cloud Computing (Beijing) Co. Ltd",
-		"domain" => "tencent.com",
-		"hostnames" => [],
-		"totalReports" => 1,
-		"numDistinctUsers" => 1,
-		"lastReportedAt" => "2018-12-20T20:55:14+00:00"
-	);
-
-	// 
-	$abuseScore = intval($response["abuseConfidenceScore"]);
-	$threshold = intval($mybb->settings['abuseipdb_min_abuse_confidence_score']);
-
-	if($abuseScore >= $threshold) {
-		die($mybb->settings['abuseipdb_spam_rejection_notice']);
-	}
+	if(!isset($response)) {
+		$api_key = $mybb->settings["abuseipdb_api_key"];
+		$client = new AbuseIPDB_Client($api_key);
 		
-	switch($mybb->settings['abuseipdb_country_policy']) {
-		case 1:
-			break;
+		try {
+			$response = $client->check($session->ipaddress);			
+		} catch(AbuseIPDB_Exception $e) {
+			trigger_error($e->getMessage(), E_USER_NOTICE);
+			return;
+		}
 
-		case -1:
-			break;
+		$_SESSION['_abuseipdb_cached_result'] = $response;
+	}
 
-		default:
-			break;
+	$handler = new AbuseIPDB_Handler($response, $mybb->settings);
+
+	try {
+		$handler->check();
+	} catch(AbuseIPDB_Exception $e) {
+		error($e->getMessage());
 	}
 }
 
