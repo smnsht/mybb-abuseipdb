@@ -148,6 +148,40 @@ function abuseipdb_install()
 
 		$db->insert_query('settings', $setting);
 	}	
+	
+	$table_name = TABLE_PREFIX . 'abuseapdb_cache';
+
+	switch($db->type) {
+		case "sqlite":
+			$db->write_query("
+				CREATE TABLE '$table_name' (
+						'ipAddress'	TEXT NOT NULL UNIQUE,
+						'isPublic'	TEXT,
+						'ipVersion'	INTEGER,
+						'isWhitelisted'	TEXT,
+						'abuseConfidenceScore'	INTEGER,
+						'countryCode'	TEXT,
+						'countryName'	TEXT,
+						'usageType'	TEXT,
+						'isp'	TEXT,
+						'domain'	TEXT,
+						'hostnames'	TEXT,
+						'totalReports'	INTEGER,
+						'numDistinctUsers'	INTEGER,
+						'lastReportedAt'	TEXT,
+						PRIMARY KEY('ipAddress')
+					);
+				");
+			break;
+
+		case 'mysql':
+		case 'mysqli':
+			$db->write_query("");
+			break;
+
+		default:
+			die('TODO');			
+	}
 
 	rebuild_settings();
 }
@@ -155,20 +189,21 @@ function abuseipdb_install()
 function abuseipdb_is_installed()
 {
 	global $db;
-
-	$where = sprintf("name = '%s'", ABUSEIPDB_SETTINGS_GROUP_NAME);
-	$query = $db->simple_select('settinggroups', '*', $where);
-	$result = $db->fetch_array($query);	
-	
-	return is_array($result);
+		
+	return $db->table_exists('abuseapdb_cache');	
 }
 
 function abuseipdb_uninstall()
 {
 	global $db;
-	
-	$db->delete_query('settings', "name like 'abuseipdb_%'");
-	$db->delete_query('settinggroups', sprintf("name = '%s'", ABUSEIPDB_SETTINGS_GROUP_NAME));
+		
+	if($db->table_exists("abuseapdb_cache"))
+	{		
+		$db->drop_table("abuseapdb_cache", true);
+
+		$db->delete_query('settings', "name like 'abuseipdb_%'");
+		$db->delete_query('settinggroups', sprintf("name = '%s'", ABUSEIPDB_SETTINGS_GROUP_NAME));	
+	}
 }
 
 function abuseipdb_activate()
@@ -190,15 +225,16 @@ function on_member_register_start()
 
 function check()
 {
-	global $mybb, $session;
+	global $mybb, $session, $db;
 
 	if($session->is_spider) {
 		error("not allowed");
 	}
-	
-	$response = $_SESSION['_abuseipdb_cached_result'];
 
-	if(!isset($response)) {
+	$query = $db->simple_select("abuseapdb_cache", "*", "ipAddress = '$session->ipaddress'");	
+	$response = $db->fetch_array($query); 
+
+	if(!$response) {
 		$api_key = $mybb->settings["abuseipdb_api_key"];
 		$client = new AbuseIPDB_Client($api_key);
 		
@@ -209,7 +245,11 @@ function check()
 			return;
 		}
 
-		$_SESSION['_abuseipdb_cached_result'] = $response;
+		$response['isPublic'] = $response['isPublic'] ? 'true' : 'false';
+		$response['isWhitelisted'] = $response['isWhitelisted'] ? 'true' : 'false';
+		$response['hostnames'] = is_array($response['hostnames']) ? join(',', $response['hostnames']) : '';		
+
+		$db->insert_query("abuseapdb_cache", $response);
 	}
 
 	$handler = new AbuseIPDB_Handler($response, $mybb->settings);
