@@ -155,28 +155,24 @@ function abuseipdb_install()
 		case "sqlite":
 			$db->write_query("
 				CREATE TABLE '$table_name' (
-						'ipAddress'	TEXT NOT NULL UNIQUE,
-						'isPublic'	TEXT,
-						'ipVersion'	INTEGER,
-						'isWhitelisted'	TEXT,
-						'abuseConfidenceScore'	INTEGER,
-						'countryCode'	TEXT,
-						'countryName'	TEXT,
-						'usageType'	TEXT,
-						'isp'	TEXT,
-						'domain'	TEXT,
-						'hostnames'	TEXT,
-						'totalReports'	INTEGER,
-						'numDistinctUsers'	INTEGER,
-						'lastReportedAt'	TEXT,
-						PRIMARY KEY('ipAddress')
+						'ip_address'	TEXT NOT NULL UNIQUE,
+						'json'	TEXT NOT NULL,
+						'created_at'	INTEGER NOT NULL,						
+						PRIMARY KEY('ip_address')
 					);
 				");
 			break;
 
 		case 'mysql':
 		case 'mysqli':
-			$db->write_query("");
+			$db->write_query("
+				CREATE TABLE $table_name (
+					`ip_address` VARCHAR(16) NOT NULL, 
+					`json` VARCHAR(512) NOT NULL, 
+					`created_at` INT NOT NULL, 
+					PRIMARY KEY (`ip_address`)
+				) ENGINE = MyISAM;
+			");
 			break;
 
 		default:
@@ -216,13 +212,6 @@ function abuseipdb_deactivate()
 
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////
-
-function on_member_register_start() 
-{
-	
-}
-
 function check()
 {
 	global $mybb, $session, $db;
@@ -230,11 +219,11 @@ function check()
 	if($session->is_spider) {
 		error("not allowed");
 	}
+	
+	$query = $db->simple_select("abuseapdb_cache", "*", "ip_address = '$session->ipaddress'");	
+	$row   = $db->fetch_array($query); 
 
-	$query = $db->simple_select("abuseapdb_cache", "*", "ipAddress = '$session->ipaddress'");	
-	$response = $db->fetch_array($query); 
-
-	if(!$response) {
+	if(!$row) {
 		$api_key = $mybb->settings["abuseipdb_api_key"];
 		$client = new AbuseIPDB_Client($api_key);
 		
@@ -243,16 +232,20 @@ function check()
 		} catch(AbuseIPDB_Exception $e) {
 			trigger_error($e->getMessage(), E_USER_NOTICE);
 			return;
-		}
+		}		
 
-		$response['isPublic'] = $response['isPublic'] ? 'true' : 'false';
-		$response['isWhitelisted'] = $response['isWhitelisted'] ? 'true' : 'false';
-		$response['hostnames'] = is_array($response['hostnames']) ? join(',', $response['hostnames']) : '';		
-
-		$db->insert_query("abuseapdb_cache", $response);
+		$db->insert_query("abuseapdb_cache", array(
+			'ip_address' => $session->ipaddress,
+			'json' => json_encode($response),
+			'created_at' => time()
+		));
+		
+	} else {
+		$response = json_decode($row['json'], true);		
 	}
 
 	$handler = new AbuseIPDB_Handler($response, $mybb->settings);
+	
 
 	try {
 		$handler->check();
